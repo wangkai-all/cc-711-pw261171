@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package demo.common;
+
+
+// A small dependency type reused by several demo messages. It lives in a
+// separate file so the client has to resolve an import graph through
+// reflection before it can build a form.
+message Address {
+  string street = 1;
+  string city = 2;
+  string country = 3;
+}
+
+enum Flavor {
+  FLAVOR_UNSPECIFIED = 0;
+  VANILLA = 1;
+  CHOCOLATE = 2;
+  STRAWBERRY = 3;
+}
+
+// Nested dependency: a message that refers to another message in this file.
+message Pet {
+  string name = 1;
+  Address home = 2;
+  Flavor favorite_flavor = 3;
+  repeated string nicknames = 4;
+}

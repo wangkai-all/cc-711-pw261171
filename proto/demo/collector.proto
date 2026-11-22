@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+package demo.collector;
+
+import "demo/common/types.proto";
+
+// The demo "collection station" service. It intentionally covers:
+//  - unary and server-streaming calls (client/BiDi streaming are out of scope)
+//  - nested messages resolved through imports
+//  - oneof and map fields
+//  - proto3 implicit-presence scalars next to `optional` explicit-presence scalars
+//  - int64/uint64/fixed64 values that exceed IEEE-754 safe integers
+//  - a stream that emits some messages and then fails mid-flight
+service CollectorService {
+  // One unary reply.
+  rpc Collect (CollectRequest) returns (CollectResponse);
+
+  // A handful of replies, then the stream ends successfully.
+  rpc Watch (WatchRequest) returns (stream WatchEvent);
+
+  // Emits a few replies, then aborts the stream with an application error.
+  // The already-delivered replies are the "partial results" the UI must keep.
+  rpc WatchWithFailure (WatchRequest) returns (stream WatchEvent);
+}
+
+message CollectRequest {
+  // ---- presence comparison -------------------------------------------------
+  // Implicit presence (plain proto3 scalar): the wire format cannot tell
+  // "unset" apart from "set to 0"/"" - both encode to nothing. The UI must
+  // not pretend otherwise.
+  int32 implicit_count = 1;
+  // Explicit presence (proto3 `optional`): unset and set-to-zero are
+  // distinguishable on the wire.
+  optional int32 explicit_count = 2;
+  string implicit_note = 3;
+  optional string explicit_note = 4;
+  demo.common.Flavor implicit_flavor = 5;
+  optional demo.common.Flavor explicit_flavor = 6;
+
+  // ---- nesting / imports ---------------------------------------------------
+  demo.common.Address delivery = 7;
+  optional demo.common.Address pickup = 8;
+  repeated demo.common.Pet pets = 9;
+
+  // ---- oneof ---------------------------------------------------------------
+  oneof payment {
+    string card_token = 10;
+    string iban = 11;
+    Cash cash = 12;
+  }
+
+  // ---- maps ----------------------------------------------------------------
+  map<string, int32> counters = 13;
+  map<string, demo.common.Address> drops = 14;
+  map<int64, string> by_epoch = 15;
+
+  // ---- 64-bit integers -----------------------------------------------------
+  int64 big_signed = 16;
+  uint64 big_unsigned = 17;
+  fixed64 big_fixed = 18;
+  sint64 big_zigzag = 19;
+  repeated int64 big_list = 20;
+
+  // ---- bytes ---------------------------------------------------------------
+  bytes payload = 21;
+  repeated bytes chunks = 22;
+
+  // ---- repeated messages ---------------------------------------------------
+  repeated demo.common.Address waypoints = 23;
+}
+
+message Cash {
+  int64 amount_cents = 1;
+  string currency = 2;
+}
+
+message CollectResponse {
+  string request_id = 1;
+  // Echo of what the server actually parsed, so the UI can show the
+  // difference between a field the client sent as default and one it omitted.
+  demo.collector.PresenceReport presence = 2;
+  demo.common.Address delivery = 3;
+  oneof settlement {
+    string settled_via_card = 4;
+    string settled_via_iban = 5;
+    Cash settled_cash = 6;
+  }
+  map<string, int32> counters = 7;
+  int64 echoed_big_signed = 8;
+  uint64 echoed_big_unsigned = 9;
+  bytes echoed_payload = 10;
+  repeated demo.common.Address waypoints = 11;
+}
+
+// Records which explicit-presence fields were present on the wire.
+message PresenceReport {
+  bool explicit_count_present = 1;
+  bool explicit_note_present = 2;
+  bool explicit_flavor_present = 3;
+  bool pickup_present = 4;
+  // For implicit fields the server can only report the value it observed -
+  // there is no way to distinguish omitted from zero.
+  int32 observed_implicit_count = 5;
+  string observed_implicit_note = 6;
+  int32 observed_implicit_flavor = 7;
+  string active_payment = 8;
+  int32 counters_entries = 9;
+}
+
+message WatchRequest {
+  int32 count = 1;
+  int32 interval_ms = 2;
+  // How many messages to deliver before the simulated failure (only used by
+  // WatchWithFailure).
+  int32 fail_after = 3;
+  string label = 4;
+  demo.common.Address drop = 5;
+}
+
+message WatchEvent {
+  int32 seq = 1;
+  int64 sequence_big = 2;
+  string label = 3;
+  demo.common.Address drop = 4;
+  int64 dropped_at_unix_ms = 5;
+  bytes chunk = 6;
+  map<string, int64> tally = 7;
+  oneof status {
+    string ok = 8;
+    WatchWarning warning = 9;
+  }
+}
+
+message WatchWarning {
+  string code = 1;
+  string detail = 2;
+}
